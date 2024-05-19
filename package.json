@@ -21,6 +21,8 @@
   "dependencies": {
     "langchain": "^0.2.0",
     "pdf-parse": "^1.1.1",
+    "pdf-parser-client-side": "^1.0.1",
+    "pdfjs": "^2.5.3",
     "pdfjs-dist": "^4.2.67"
   }
 }

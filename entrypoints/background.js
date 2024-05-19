@@ -1,6 +1,6 @@
-import { WebPDFLoader } from 'langchain/document_loaders/web/pdf';
 export default defineBackground(() => {
   console.log("Hello background!", { id: browser.runtime.id });
+  // pdfjs.GlobalWorkerOptions.workerSrc = `//mozilla.github.io/pdf.js/build/pdf.worker.mjs`;
 
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     console.log("message : ", message);
@@ -32,33 +32,35 @@ export default defineBackground(() => {
       //async
       return true;
     } else if (message.action == "summarizeFile") {
-      try { 
-        const file = message.file;
-        const reader=new FileReader();
+      try {
+        console.log("Received at background: ", message);
 
-        reader.onload=async()=>{
-          const arrayBuffer = reader.result;
-
-          const blob = new Blob([new Uint8Array(arrayBuffer)],{type:file.type});
-          const text = await extractText(blob);
-          // const response = await fetch("http://127.0.0.1:8000/summarizePDF", {
-          //   method: "POST",
-          //   body: JSON.stringify({ text: text }),
-          //   headers: {
-          //     "Content-type": "application/json",
-          //   },
-
-          // });
-          // const data = await response.json();
-          console.log(text);
-          sendResponse({summary:"abcd"});
-          // sendResponse({summary:data.summary});
-          reader.readAsArrayBuffer(file);
-        }
-        
+        let pdf = message.all_text;
+        console.log("plain_text : ", pdf);
+        const fetchAPI = async () => {
+          try {
+            const response = await fetch(
+              "http://127.0.0.1:8000/summarizeFile",
+              {
+                method: "POST",
+                body: JSON.stringify({ text: pdf }),
+                headers: {
+                  "Content-type": "application/json",
+                },
+              }
+            );
+            const data = await response.json();
+            console.log(data);
+            sendResponse({ summary: data.summary });
+          } catch (err) {
+            console.log("ERROR: ", err);
+          }
+        };
+        fetchAPI();
+        // sendResponse({ ack: "Got it NO worries!!!" });
       } catch (err) {
         console.log("ERROR extracting text from file: ", err);
-        sendResponse({summary:"Error occured"});
+        sendResponse({ summary: "Error occured" });
       }
 
       return true;
