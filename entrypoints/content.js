@@ -1,11 +1,8 @@
-// import { PDFJS } from "pdf-parse/lib/pdf.js/v1.10.100/build/pdf";
+
 import "./style.css";
 
-// import extractTextFromPDF from "pdf-parser-client-side";
+import EasySpeech from "easy-speech";
 
-// const { pdfjs } = require("react-pdf");
-// import {pdfjsWorker} from "pdfjs-dist/build/pdf.worker.entry";
-// pdfjs.GlobalWorkerOptions.workerSrc = pdfjsWorker; // Path to the pdf.worker.js file
 
 import { pdfjs } from "react-pdf";
 
@@ -13,10 +10,7 @@ export default defineContentScript({
   matches: ["<all_urls>"],
   cssInjectionMode: "ui",
   async main(ctx) {
-    // pdfjs.GlobalWorkerOptions.workerSrc = new URL(
-    //   'pdfjs-dist/build/pdf.worker.min.js',
-    //   import.meta.url,
-    // ).toString();
+   
     pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.js`;
     const extractTextFromPDF = async (file) => {
       try {
@@ -50,21 +44,60 @@ export default defineContentScript({
     };
 
     
-    async function serialize(src) {
-      const wasBlob = src instanceof Blob;
-      const blob = wasBlob ? src : await new Response(src).blob();
-      const reader = new FileReader();
-      return new Promise((resolve) => {
-        reader.onload = () => resolve([reader.result, blob.type, wasBlob]);
-        reader.readAsDataURL(blob);
-      });
-    }
+
+    const sayAloud = async (summary,playButton) => {
+      const browserComp = EasySpeech.detect();
+      
+      
+      if (
+        !browserComp.speechSynthesis ||
+        !browserComp.speechSynthesisUtterance
+      ) {
+        console.log("Browser does not support speech synthesis.");
+        return;
+      }
+
+      try {
+        const initResponse = await EasySpeech.init({
+          maxTimeout: 5000,
+          interval: 250,
+        });
+        console.log("Init Response : ", initResponse);
+      } catch (err) {
+        console.log("Error TTS: ", err);
+      }
+      // .then(() => console.debug('Initialization complete'))
+      // .catch(e => console.error(e));
+
+      const voice = EasySpeech.voices()[0];
+      console.log("voice = ", voice);
+      const speakText = async () => {
+        console.log("Speaking!!!");
+        await EasySpeech.speak({
+          text: summary,
+          voice: voice, // Optional, specify a voice if needed
+          pitch: 2,
+          rate: 1.5,
+          volume: 1,
+          boundary: (e) => console.debug("Boundary reached"),
+        });
+
+        
+        playButton.innerText = "Play Speech"; // Update the button text after speech completion
+      };
+      speakText()
+     
+      
+    };
+    
 
     const displaySummary = (summary, container) => {
       const button = container.querySelector("#summarize-button");
-      button.innerText = "Sum up this web Page!";
+      const fileButton = container.querySelector("#file-summarize-button");
 
-      // const optionsBox = container.querySelector("#options");
+      button.innerText = "Sum up this web Page!";
+      fileButton.innerText = "Summarize File";
+     
       const summaryBox = document.createElement("div");
       summaryBox.id = "summary-box";
       summaryBox.style.cssText =
@@ -91,6 +124,35 @@ export default defineContentScript({
       summaryText.id = "summary-text";
       summaryBox.appendChild(summaryText);
       summaryBox.appendChild(closeButton);
+
+      
+      const playSpeech = document.createElement("button");
+      playSpeech.id = 'playButton';
+      playSpeech.innerText = 'Play Speech';
+      playSpeech.addEventListener('click',()=>{
+
+        if(playSpeech.innerText == 'Play Speech'){
+          sayAloud(summary,playSpeech);
+          playSpeech.innerText = 'Pause';
+        }
+        else if(playSpeech.innerText == 'Pause'){
+          EasySpeech.pause();
+          playSpeech.innerText = 'Resume';
+        }
+        else if(playSpeech.innerText == 'Resume'){
+          EasySpeech.resume();
+          playSpeech.innerText = 'Pause';
+        }
+      });
+
+      const StopSpeech = document.createElement("button");
+      StopSpeech.innerText = 'Stop';
+      StopSpeech.addEventListener('click',()=>{
+        EasySpeech.cancel();
+        playSpeech.innerText = 'Play Speech';
+      })
+      summaryBox.appendChild(playSpeech);
+      summaryBox.appendChild(StopSpeech); 
       // document.body.appendChild(summaryBox);
       // shadow.appendChild(summaryBox);
       container.append(summaryBox);
@@ -110,49 +172,16 @@ export default defineContentScript({
       );
     };
 
-    const getSummaryDoc = (container, file) => {
-      // const reader = new FileReader();
-      // reader.onload=()=>{
-      //   const arrayBuffer = reader.result;
-      //   console.log("Array Buffer = ",arrayBuffer);
+    
 
-      //   chrome.runtime.sendMessage(
-      //     {action:"summarizeFile",file:{buffer:arrayBuffer,type:file.type,name:file.name}},
-      //     (response)=>{
-      //       console.log("response = ",response);
-      //       if (response && response.summary) {
-      //         displaySummary(response.summary, container);
-      //       } else if (response && response.error) {
-      //         displaySummary(response.error, container);
-      //       }
-      //     }
-      //   )
-
-      // }
-      // reader.readAsArrayBuffer(file);
-      chrome.runtime.sendMessage(
-        { action: "summarizeFile", file: { pdfData: file } },
-        (response) => {
-          console.log(response);
-        }
-      );
-    };
-
-    const handleFormSubmit = async (event,container) => {
+    const handleFormSubmit = async (event, container) => {
       event.preventDefault();
-      // const container = document.getElementById('options');
-      const inputFile = event.target.elements["docFile"].files[0];
       
-      // const reader = new FileReader();
-      // reader.addEventListener("load", () => {
-      //   console.log("Base64:  ", typeof reader.result, reader.result);
-        
-      //   console.log("blobUrl : ",reader.result);
-      // });
+      const inputFile = event.target.elements["docFile"].files[0];
       const all_text = await extractTextFromPDF(inputFile);
-      // console.log("PDF text: ",all_text);
+      
       chrome.runtime.sendMessage(
-        { action: "summarizeFile", all_text:  all_text},
+        { action: "summarizeFile", all_text: all_text },
         (response) => {
           if (response && response.summary) {
             displaySummary(response.summary, container);
@@ -162,7 +191,7 @@ export default defineContentScript({
         }
       );
 
-      // reader.readAsDataURL(inputFile);
+      
     };
 
     const createForm = (container) => {
@@ -177,14 +206,16 @@ export default defineContentScript({
       buttonSubmit.type = "submit";
       buttonSubmit.innerText = "Summarize file";
       buttonSubmit.style.cssText = `padding:5px;`;
-
+      buttonSubmit.id = "file-summarize-button";
       buttonSubmit.addEventListener("click", (event) => {
         buttonSubmit.innerText = "Summarizing your file...";
         // getSummaryDoc(container);
       });
       form.appendChild(input);
       form.appendChild(buttonSubmit);
-      form.addEventListener("submit", (event)=>{handleFormSubmit(event,container)});
+      form.addEventListener("submit", (event) => {
+        handleFormSubmit(event, container);
+      });
       container.append(form);
     };
 
@@ -210,7 +241,6 @@ export default defineContentScript({
         console.log("Button clicked");
         summarizeButton.innerText = "Summarizing...";
         getSummaryUrl(container);
-        
       });
 
       container.append(summarizeButton);
@@ -243,11 +273,11 @@ export default defineContentScript({
         container.append(button);
 
         button.addEventListener("mouseenter", () => {
-          // button.innerText='Summarizing...';
-          // getSummaryUrl(container);
+         
 
-          //start
-          createOptionsBox(container);
+          
+          const box = container.querySelector("#options");
+          if (!box) createOptionsBox(container);
         });
       }
     };
@@ -255,15 +285,7 @@ export default defineContentScript({
       name: "example-ui",
       position: "inline",
       onMount(container) {
-        // Define how your UI will be mounted inside the container
-        // const exists = container.querySelector("#assistant-button");
-        // if (!exists) {
-        //   const button = document.createElement("button");
-        //   button.innerText = "Assistant";
-
-        //   button.id = "assistant-button";
-        //   container.append(button);
-        // }
+        
         addAssist(container);
       },
     });
